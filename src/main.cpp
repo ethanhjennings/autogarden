@@ -15,7 +15,7 @@
 #include "handle_actuators.h"
 #include "led_helper.h"
 #include "I2CSoilMoistureSensor.h"
-
+#include "version.h"
 
 BluetoothSerial SerialBT;
 
@@ -31,6 +31,7 @@ String SOIL_MOISTURE_TOPIC = "autogarden/<client>/soil_moisture";
 String WATER_LEVEL_HIGH_TOPIC = "autogarden/water-level/high";
 String WATER_LEVEL_LOW_TOPIC = "autogarden/water-level/low";
 String ONLINE_TOPIC = "autogarden/<client>/online";
+String VERSION_HASH_TOPIC = "autogarden/<client>/version_hash";
 
 constexpr uint8_t WATER_LEVEL_LOW_PIN = 18;
 constexpr uint8_t WATER_LEVEL_HIGH_PIN = 19; 
@@ -106,6 +107,7 @@ boolean setupMqtt() {
     replaceTemplate(WATER_LEVEL_HIGH_TOPIC);
     replaceTemplate(WATER_LEVEL_LOW_TOPIC);
     replaceTemplate(ONLINE_TOPIC);
+    replaceTemplate(VERSION_HASH_TOPIC);
 
     mqtt.begin(config.mqttBrokerIP, wifiClient);
     mqtt.onMessage(messageReceived);
@@ -116,6 +118,7 @@ boolean setupMqtt() {
         SerialBT.println("Connected!");
         // Overwrite existing will
         mqtt.publish(ONLINE_TOPIC, "1", true, 1);
+        mqtt.publish(VERSION_HASH_TOPIC, VERSION_HASH, true, 1);
     } else {
         Serial.println("ERROR!");
         SerialBT.println("ERROR!");
@@ -126,7 +129,7 @@ boolean setupMqtt() {
 
     mqtt.subscribe(ROLLBACK_TOPIC);
     if (config.isPump) {
-       mqtt.subscribe(PUMP_TOPIC);
+        mqtt.subscribe(PUMP_TOPIC);
     } else {
         mqtt.subscribe(SOLENOID_TOPIC);
     }
@@ -178,8 +181,8 @@ void readMoisture(void* pvParameter) {
 
 
     while (true) {
-        moistureSensor.begin();
-        delay(1000); // Wait for sensor to boot
+    moistureSensor.begin();
+    delay(1000); // Wait for sensor to boot
         auto moisture = getSoilMoisture(moistureSensor, 1000, 10);
         xQueueSend(moistureQueue, (void*)&moisture, portMAX_DELAY);
         moistureSensor.sleep();
@@ -214,16 +217,13 @@ void readSensors() {
     }
 }
 
-void runOTA(void* pvParameter) {
-    bool markedValid = false;
-    while (true) {
-        ArduinoOTA.handle();
-        if (!markedValid && millis() > 1000 * 30) {
-            Serial.println("Marking OTA app as valid!");
-            esp_ota_mark_app_valid_cancel_rollback();
-            markedValid = true;
-        }
-        delay(200);
+void runOTA() {
+    static bool markedValid = false;
+    ArduinoOTA.handle();
+    if (!markedValid && millis() > 1000 * 30) {
+        Serial.println("Marking OTA app as valid!");
+        esp_ota_mark_app_valid_cancel_rollback();
+        markedValid = true;
     }
 }
 
@@ -245,8 +245,6 @@ void setupOTA() {
             ESP.restart();
         });
     ArduinoOTA.begin();
-
-    xTaskCreate(&runOTA, "run_ota", 1024 * 8, NULL, 31, NULL);
 
     Serial.println("Finished setting up OTA");
 }
@@ -273,6 +271,9 @@ void setup() {
     
     while (!Serial) {
     }
+    
+    Serial.print("Version hash: ");
+    Serial.println(VERSION_HASH);
 
     pinMode(WATER_LEVEL_HIGH_PIN, INPUT);
     pinMode(WATER_LEVEL_LOW_PIN, INPUT);
@@ -312,6 +313,7 @@ void loop() {
         }
     }
     mqtt.loop();
-    delay(50);
+    runOTA();
     readSensors();
+    delay(50);
 }

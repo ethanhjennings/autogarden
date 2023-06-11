@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "led_helper.h"
+#include "version.h"
 
 // Handles configuration settings via a CLI Bluetooth Serial interface.
 // Should work with a phone app or via windows COM port.
@@ -99,6 +100,8 @@ void handleBT(void* pvParameter) {
                     printBTHelp();
                 } else if (strcmp(name, "show") == 0) {
                     saving = false;
+                    bts->print("version_hash: ");
+                    bts->println(VERSION_HASH);
                     char output[1024];
                     config->toString(output);
                     bts->print(output);
