@@ -155,7 +155,6 @@ int cmp(const void* pa, const void* pb) {
 QueueHandle_t moistureQueue;
 
 double getSoilMoisture(I2CSoilMoistureSensor& moistureSensor, uint32_t numSamples, uint32_t delayTime) {
-    //return moistureSensor.getCapacitance();
     uint32_t moistureArray[numSamples];
     for (int i = 0; i < numSamples; i++) {
         moistureArray[i] = moistureSensor.getCapacitance();
@@ -175,17 +174,16 @@ double getSoilMoisture(I2CSoilMoistureSensor& moistureSensor, uint32_t numSample
 
 void readMoisture(void* pvParameter) {
     const auto INTERVAL = 5*60*1000; // 5 minutes
-
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     I2CSoilMoistureSensor moistureSensor;
 
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    Wire.setClock(5000);
 
     while (true) {
-    moistureSensor.begin();
-    delay(1000); // Wait for sensor to boot
-        auto moisture = getSoilMoisture(moistureSensor, 1000, 10);
+        moistureSensor.begin(true);
+        auto moisture = getSoilMoisture(moistureSensor, 1000, 0);
+
         xQueueSend(moistureQueue, (void*)&moisture, portMAX_DELAY);
-        moistureSensor.sleep();
 
         delay(INTERVAL);
     }
@@ -214,6 +212,8 @@ void readSensors() {
     double moisture;
     if (xQueueReceive(moistureQueue, &moisture, 0 /* Don't block */) == pdTRUE) {
         mqtt.publish(SOIL_MOISTURE_TOPIC, String(moisture));
+        Serial.print("Got soil moisture: ");
+        Serial.println(moisture);
     }
 }
 
